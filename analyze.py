@@ -2,6 +2,7 @@ from pymongo import MongoClient
 import networkx as nx
 import matplotlib.pyplot as plt
 import pyshark
+from IPv6ToIPv4 import query_ripe_asn_history
 
 def run_multiple_traceroutes(targets):
     """
@@ -81,6 +82,15 @@ def save_to_mongodb(collection, data):
     else:
         collection.insert_one(data)  # Insert individual document
 
+def query_asn_for_ip(ip):
+    """
+    Wrapper for RIPE ASN lookup for use in traceroute/graph analysis.
+    :param ip: IPv4 or IPv6 address.
+    :return: List of ASNs (may be empty).
+    """
+    asns = query_ripe_asn_history(ip)
+    return asns if asns else []
+
 def analyze_pcap_to_mongodb(file_path, db):
     """
     Analyze Wireshark PCAP file and store results into MongoDB.
@@ -137,3 +147,20 @@ def analyze_pcap_to_mongodb(file_path, db):
         "bssid_data": bssid_data,
         "neighbor_solicitations": neighbor_solicitations
     }
+
+def compute_all_pairs_shortest_paths(graph):
+    """
+    Compute and log all-pairs shortest ASN paths in the graph.
+    :param graph: ASN graph (NetworkX DiGraph).
+    :return: Dict of (source_asn, dest_asn) -> (path, length)
+    """
+    all_paths = dict(nx.all_pairs_shortest_path(graph))
+    all_lengths = dict(nx.all_pairs_shortest_path_length(graph))
+    results = {}
+    for src, dests in all_paths.items():
+        for dst, path in dests.items():
+            results[(src, dst)] = (path, all_lengths[src][dst])
+    print("\nAll-pairs shortest ASN paths:")
+    for (src, dst), (path, length) in results.items():
+        print(f"{src} -> {dst}: {' -> '.join(map(str, path))} (length: {length})")
+    return results
