@@ -3,17 +3,22 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import pyshark
 from IPv6ToIPv4 import query_ripe_asn_history
+from GeoIP import query_maxmind_api
 
-def run_multiple_traceroutes(targets):
+def run_multiple_traceroutes(targets, account_id=None, api_key=None):
     """
-    Perform traceroutes for a list of targets (IPv4 and/or IPv6).
+    Perform traceroutes for a list of targets (IPv4 and/or IPv6), with optional GeoIP enrichment.
     :param targets: List of target IPs/domains.
+    :param account_id: MaxMind account ID (optional).
+    :param api_key: MaxMind API key (optional).
     :return: Dictionary where keys are targets and values are lists of traceroute hops.
     """
     traceroute_results = {}
     for target in targets:
         is_ipv6 = ":" in target  # Simple heuristic for IPv6
         hops = run_traceroute(target, ipv6=is_ipv6)  # You must implement run_traceroute
+        if account_id and api_key:
+            hops = enrich_hops_with_geoip(hops, account_id, api_key)
         traceroute_results[target] = hops
     return traceroute_results
 
@@ -90,6 +95,22 @@ def query_asn_for_ip(ip):
     """
     asns = query_ripe_asn_history(ip)
     return asns if asns else []
+
+def enrich_hops_with_geoip(hops, account_id, api_key):
+    """
+    Enrich each hop with GeoIP data using MaxMind API.
+    :param hops: List of hop dictionaries (must contain 'ip').
+    :param account_id: MaxMind account ID.
+    :param api_key: MaxMind API key.
+    :return: List of hops with added 'geoip' field.
+    """
+    enriched = []
+    for hop in hops:
+        ip = hop.get("ip")
+        geoip = query_maxmind_api(ip, account_id, api_key) if ip else None
+        hop["geoip"] = geoip
+        enriched.append(hop)
+    return enriched
 
 def analyze_pcap_to_mongodb(file_path, db):
     """
